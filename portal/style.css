@@ -1,0 +1,13 @@
+body {
+  font-family: sans-serif;
+  margin: 2rem;
+}
+main {
+  display: grid;
+  gap: 1rem;
+  max-width: 28rem;
+}
+label {
+  display: grid;
+  gap: 0.3rem;
+}
