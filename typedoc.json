@@ -1,0 +1,12 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/server.ts", "public/src/main.ts"],
+  "entryPointStrategy": "expand",
+  "out": "doc/tsdoc",
+  "exclude": ["node_modules/**", "tests/**", "temp/**"],
+  "readme": "README.md",
+  "validation": {
+    "notExported": true,
+    "invalidLink": true
+  }
+}
