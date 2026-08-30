@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,7 +7,7 @@ import compression from "compression";
 import express from "express";
 import multer from "multer";
 import { config } from "./config.js";
-import { FileService, validateAndResolvePath } from "./modules/fileService.js";
+import { FileService } from "./modules/fileService.js";
 import { GitService } from "./modules/gitService.js";
 import { ImageService } from "./modules/imageService.js";
 import { LogService } from "./modules/logService.js";
@@ -19,11 +20,13 @@ const repoRoot = path.resolve(__dirname, "..");
 const workspaceDir = path.join(repoRoot, "workspace");
 const attachmentsDir = path.join(workspaceDir, "attachments");
 const tempDir = path.join(repoRoot, "temp");
+const editorIndexHtml = readFileSync(path.join(repoRoot, "public", "index.html"), "utf-8");
 
 export const createApp = () => {
   const app = express();
   const token = crypto.randomBytes(32).toString("hex");
   const upload = multer();
+  const routeAccess = new Map<string, number>();
 
   const fileService = new FileService(workspaceDir);
   const imageService = new ImageService(workspaceDir, attachmentsDir, {
@@ -50,6 +53,22 @@ export const createApp = () => {
     next();
   });
 
+  const rateLimitFsRoute = (
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction,
+  ) => {
+    const key = req.ip ?? "unknown";
+    const now = Date.now();
+    const last = routeAccess.get(key) ?? 0;
+    if (now - last < 1000) {
+      res.status(429).json({ error: "too many requests" });
+      return;
+    }
+    routeAccess.set(key, now);
+    next();
+  };
+
   app.get("/api/health", (_, res) => {
     res.json({
       ok: true,
@@ -65,11 +84,8 @@ export const createApp = () => {
   });
 
   app.get("/api/files", async (req, res) => {
-    const target = typeof req.query.path === "string" ? req.query.path : "note.md";
-    const safeTarget = validateAndResolvePath(workspaceDir, target);
-    const relativePath = path.relative(workspaceDir, safeTarget);
-    const content = await fileService.read(relativePath);
-    res.json({ path: relativePath, content });
+    const content = await fileService.readNote();
+    res.json({ path: "note.md", content });
   });
 
   app.post("/api/upload", upload.single("file"), async (req, res) => {
@@ -90,12 +106,12 @@ export const createApp = () => {
     }
   });
 
-  app.post("/api/attachments/gc", async (_, res) => {
+  app.post("/api/attachments/gc", rateLimitFsRoute, async (_, res) => {
     const deleted = await imageService.gcUnusedFiles();
     res.json({ deleted });
   });
 
-  app.post("/api/logs/client", async (req, res) => {
+  app.post("/api/logs/client", rateLimitFsRoute, async (req, res) => {
     if (!config.ENABLE_CLIENT_LOGGING) {
       res.status(403).json({ error: "client logging disabled" });
       return;
@@ -108,7 +124,7 @@ export const createApp = () => {
   app.use(express.static(path.join(repoRoot, "public")));
 
   app.use((_, res) => {
-    res.sendFile(path.join(repoRoot, "public", "index.html"));
+    res.type("html").send(editorIndexHtml);
   });
 
   const server = createServer(app);

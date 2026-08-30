@@ -11,7 +11,7 @@ describe("validateAndResolvePath", () => {
 
   it("ディレクトリトラバーサルを拒否する", () => {
     expect(() => validateAndResolvePath("/tmp/workspace", "../secret.txt")).toThrow(
-      /Directory Traversal Blocked/,
+      /Security Alert/,
     );
   });
 });
